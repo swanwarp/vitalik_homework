@@ -3,6 +3,7 @@ package com.company;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
@@ -16,28 +17,31 @@ public class Main {
         List<INode> graph = buildCube(CubeNode.SIZE);
 
         Instant start;
+        int[] dClassique, dQuick;
 
-        for (int i = 0; i < 1; i++) {
-            start = Instant.now();
-            bfsLeClassique(graph, 0);
-            System.out.println(Duration.between(start, Instant.now()).toMillis());
-        }
+        start = Instant.now();
+        dClassique = bfsLeClassique(graph, 0);
+        System.out.println(Duration.between(start, Instant.now()).toMillis());
 
         System.out.println();
 
-        for (int i = 0; i < 1; i++) {
-            start = Instant.now();
+        start = Instant.now();
+        dQuick = bfsLeQuick(graph, 0, 10000, 7500, true);
+        System.out.println(Duration.between(start, Instant.now()).toMillis());
 
-            bfsLeQuick(graph, 0, 10000, 7500, true);
-
-            System.out.println(Duration.between(start, Instant.now()).toMillis());
+        for (int i = 0; i < dClassique.length; i++) {
+            if (dClassique[i] != dQuick[i]) {
+                System.out.println("You were ducked! Duck 1 = " + dClassique[i] + ", Duck 2 = " + dQuick[i]);
+            }
         }
     }
 
-    public static boolean[] bfsLeClassique(List<INode> graph, int start) {
+    public static int[] bfsLeClassique(List<INode> graph, int start) {
         boolean[] visited = new boolean[graph.size()];
+        int[] d = new int[graph.size()];
 
         HashSet<INode> layer = new HashSet<>();
+        d[start] = 0;
 
         layer.add(graph.get(start));
 
@@ -52,6 +56,7 @@ public class Main {
 
                     if (!visited[u.getIndex()]) {
                         newLayer.add(u);
+                        d[u.getIndex()] = d[v.getIndex()] + 1;
                     }
                 }
             }
@@ -59,11 +64,12 @@ public class Main {
             layer = newLayer;
         }
 
-        return visited;
+        return d;
     }
 
-    public static void bfsLeQuick(List<INode> graph, int start, int block, int scanBlock, boolean seqFilter) {
+    public static int[] bfsLeQuick(List<INode> graph, int start, int block, int scanBlock, boolean seqFilter) {
         AtomicBoolean[] visited = new AtomicBoolean[graph.size()];
+        int[] d = new int[graph.size()];
 
         for (int i = 0; i < graph.size(); i++) {
             visited[i] = new AtomicBoolean();
@@ -72,6 +78,8 @@ public class Main {
         INode[] layer = new INode[1];
 
         layer[0] = graph.get(start);
+        d[start] = 0;
+        int count = 0;
 
         visited[start].set(true);
 
@@ -83,16 +91,19 @@ public class Main {
 
                 INode[] newLayer = new INode[sizes[sizes.length - 1]];
 
-                pfor(graph, layer, visited, newLayer, sizes, 0, layer.length, block, service);
-                //pfor2(graph, layer, visited, newLayer, sizes, block, service);
+                pfor(graph, layer, visited, newLayer, sizes, 0, layer.length, block, service, d, count + 1);
 
                 layer = filter(newLayer, scanBlock, service, seqFilter).toArray(new INode[0]);
+
+                count++;
             }
         } catch (InterruptedException | ExecutionException e) {
             e.printStackTrace();
         } finally {
             service.shutdown();
         }
+
+        return d;
     }
 
     private static List<INode> filter(INode[] newLayer, int block, ExecutorService service, boolean seq) throws ExecutionException, InterruptedException  {
@@ -204,17 +215,20 @@ public class Main {
         return sizes;
     }
 
-    private static void pfor(List<INode> graph, INode[] layer, AtomicBoolean[] visited, INode[] newLayer, int[] sizes, int l, int r, int block, ExecutorService service) {
+    private static void pfor(
+            List<INode> graph, INode[] layer, AtomicBoolean[] visited, INode[] newLayer, int[] sizes, int l, int r,
+            int block, ExecutorService service, int[] d, int count)
+    {
         if (r - l <= block) {
             for (int i = l; i < r; i++) {
-                addNeighboursFromNode(graph, layer, visited, newLayer, sizes, i);
+                addNeighboursFromNode(graph, layer, visited, newLayer, sizes, i, d, count);
             }
         }
         else {
             int m = (r + l) / 2;
 
-            Future<?> left = service.submit(() -> pfor(graph, layer, visited, newLayer, sizes, l, m, block, service));
-            Future<?> right = service.submit(() -> pfor(graph, layer, visited, newLayer, sizes, m + 1, r, block, service));
+            Future<?> left = service.submit(() -> pfor(graph, layer, visited, newLayer, sizes, l, m, block, service, d, count));
+            Future<?> right = service.submit(() -> pfor(graph, layer, visited, newLayer, sizes, m + 1, r, block, service, d, count));
 
             try {
                 left.get();
@@ -225,40 +239,7 @@ public class Main {
         }
     }
 
-    private static void pfor2(List<INode> graph, INode[] layer, AtomicBoolean[] visited, INode[] newLayer, int[] sizes, int block, ExecutorService service) throws ExecutionException, InterruptedException {
-        if (layer.length <= block) {
-            for (int i = 0; i < layer.length; i++) {
-                addNeighboursFromNode(graph, layer, visited, newLayer, sizes, i);
-            }
-        }
-        else {
-            int bSize = layer.length / block;
-
-            if (bSize * block != layer.length) {
-                bSize++;
-            }
-
-            Future<?>[] f = new Future[bSize];
-
-            for (int i = 0; i < f.length; i++) {
-                int ii = i;
-
-                f[i] = service.submit(() -> {
-                    int min = Math.min(block * ii + block, layer.length);
-
-                    for (int j = ii * block; j < min; j++) {
-                        addNeighboursFromNode(graph, layer, visited, newLayer, sizes, j);
-                    }
-                });
-            }
-
-            for (Future<?> future : f) {
-                future.get();
-            }
-        }
-    }
-
-    private static void addNeighboursFromNode(List<INode> graph, INode[] layer, AtomicBoolean[] visited, INode[] newLayer, int[] sizes, int i) {
+    private static void addNeighboursFromNode(List<INode> graph, INode[] layer, AtomicBoolean[] visited, INode[] newLayer, int[] sizes, int i, int[] d, int count) {
         int index = 0;
 
         if (i > 0) {
@@ -270,6 +251,7 @@ public class Main {
 
             if (visited[u.getIndex()].compareAndSet(false, true)) {
                 newLayer[index++] = u;
+                d[u.getIndex()] = count;
             }
         }
     }

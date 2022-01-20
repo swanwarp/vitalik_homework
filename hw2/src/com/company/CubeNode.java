@@ -49,4 +49,13 @@ public class CubeNode implements INode {
     public int getIndex() {
         return i * SIZE * SIZE + j * SIZE + k;
     }
+
+    @Override
+    public String toString() {
+        return "{" +
+                "i=" + i +
+                ", j=" + j +
+                ", k=" + k +
+                '}';
+    }
 }
