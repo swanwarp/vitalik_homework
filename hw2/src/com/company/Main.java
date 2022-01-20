@@ -42,6 +42,7 @@ public class Main {
 
         HashSet<INode> layer = new HashSet<>();
         d[start] = 0;
+        visited[start] = true;
 
         layer.add(graph.get(start));
 
@@ -49,12 +50,11 @@ public class Main {
             HashSet<INode> newLayer = new HashSet<>();
 
             for (INode v : layer) {
-                visited[v.getIndex()] = true;
-
                 for (Integer ui : v.getNeighbours()) {
                     INode u = graph.get(ui);
 
                     if (!visited[u.getIndex()]) {
+                        visited[u.getIndex()] = true;
                         newLayer.add(u);
                         d[u.getIndex()] = d[v.getIndex()] + 1;
                     }
@@ -79,7 +79,6 @@ public class Main {
 
         layer[0] = graph.get(start);
         d[start] = 0;
-        int count = 0;
 
         visited[start].set(true);
 
@@ -91,11 +90,9 @@ public class Main {
 
                 INode[] newLayer = new INode[sizes[sizes.length - 1]];
 
-                pfor(graph, layer, visited, newLayer, sizes, 0, layer.length, block, service, d, count + 1);
+                pfor(graph, layer, visited, newLayer, sizes, 0, layer.length, block, service, d);
 
                 layer = filter(newLayer, scanBlock, service, seqFilter).toArray(new INode[0]);
-
-                count++;
             }
         } catch (InterruptedException | ExecutionException e) {
             e.printStackTrace();
@@ -217,18 +214,18 @@ public class Main {
 
     private static void pfor(
             List<INode> graph, INode[] layer, AtomicBoolean[] visited, INode[] newLayer, int[] sizes, int l, int r,
-            int block, ExecutorService service, int[] d, int count)
+            int block, ExecutorService service, int[] d)
     {
         if (r - l <= block) {
             for (int i = l; i < r; i++) {
-                addNeighboursFromNode(graph, layer, visited, newLayer, sizes, i, d, count);
+                addNeighboursFromNode(graph, layer, visited, newLayer, sizes, i, d);
             }
         }
         else {
             int m = (r + l) / 2;
 
-            Future<?> left = service.submit(() -> pfor(graph, layer, visited, newLayer, sizes, l, m, block, service, d, count));
-            Future<?> right = service.submit(() -> pfor(graph, layer, visited, newLayer, sizes, m + 1, r, block, service, d, count));
+            Future<?> left = service.submit(() -> pfor(graph, layer, visited, newLayer, sizes, l, m, block, service, d));
+            Future<?> right = service.submit(() -> pfor(graph, layer, visited, newLayer, sizes, m + 1, r, block, service, d));
 
             try {
                 left.get();
@@ -239,7 +236,7 @@ public class Main {
         }
     }
 
-    private static void addNeighboursFromNode(List<INode> graph, INode[] layer, AtomicBoolean[] visited, INode[] newLayer, int[] sizes, int i, int[] d, int count) {
+    private static void addNeighboursFromNode(List<INode> graph, INode[] layer, AtomicBoolean[] visited, INode[] newLayer, int[] sizes, int i, int[] d) {
         int index = 0;
 
         if (i > 0) {
@@ -251,7 +248,7 @@ public class Main {
 
             if (visited[u.getIndex()].compareAndSet(false, true)) {
                 newLayer[index++] = u;
-                d[u.getIndex()] = count;
+                d[u.getIndex()] = d[layer[i].getIndex()] + 1;
             }
         }
     }

@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class CubeNode implements INode {
-    public static final int SIZE = 200;
+    public static final int SIZE = 3;
 
     private final int i, j, k;
 
